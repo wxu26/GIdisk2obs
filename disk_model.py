@@ -713,17 +713,18 @@ class DiskModel:
         if Sigma_cs < Sigma_cs_l:
             tau_p_mid, tau_r_mid, Sigma, T_mid = 1e-8, 1e-8, 0, 5
         elif Sigma_cs > Sigma_cs_r:
-            tau_p_mid = self.f_tau_p_mid(1,T_eff)
-            tau_r_mid = self.f_tau_r_mid(1,T_eff)
-            Sigma_dust = self.f_Sigma(1,T_eff)
-            T_mid = self.f_T_mid(1,T_eff)
-            cs_dust = Sigma_dust/Sigma_cs_r
-            cs_dustless = get_cs_scalar(self.T_subl)
-            a = 1
-            b = 2*Sigma_dust - Sigma_cs * cs_dustless
-            c = Sigma_dust**2 - Sigma_cs * cs_dust * Sigma_dust
-            Sigma_dustless = (-b + np.sqrt(b**2-4*a*c))/(2*a)
-            Sigma = Sigma_dustless + Sigma_dust
+            tau_p_mid, tau_r_mid, Sigma, T_mid = 1e-8, 1e-8, 0, 5
+            #tau_p_mid = self.f_tau_p_mid(1,T_eff)
+            #tau_r_mid = self.f_tau_r_mid(1,T_eff)
+            #Sigma_dust = self.f_Sigma(1,T_eff)
+            #T_mid = self.f_T_mid(1,T_eff)
+            #cs_dust = Sigma_dust/Sigma_cs_r
+            #cs_dustless = get_cs_scalar(self.T_subl)
+            #a = 1
+            #b = 2*Sigma_dust - Sigma_cs * cs_dustless
+            #c = Sigma_dust**2 - Sigma_cs * cs_dust * Sigma_dust
+            #Sigma_dustless = (-b + np.sqrt(b**2-4*a*c))/(2*a)
+            #Sigma = Sigma_dustless + Sigma_dust
         else:
             x = np.log(Sigma_cs/Sigma_cs_l) / np.log(Sigma_cs_r/Sigma_cs_l)        
             tau_p_mid = self.f_tau_p_mid(x,T_eff)
@@ -868,7 +869,7 @@ class DiskImage:
     """
     def __init__(
         self, fname, ra_deg, dec_deg, distance_pc, rms_Jy, disk_pa,
-        img_size_au=400, remove_background=True,
+        img_size_au=400, remove_background=False,
         ):
         
         self.ra_deg = ra_deg
@@ -910,9 +911,9 @@ class DiskImage:
         if remove_background:
             background = np.sum(self.img *(self.img <(3*self.rms_Jy))) / np.sum(self.img <(3*self.rms_Jy))
             self.img = self.img - background
-        # area of a gaussian beam: 2pi*sigma1*sigma2, sigma = 1/2 * beam width
+        # area of a gaussian beam: pi/(4*ln(2)) * bmaj*bmin
         # beam area in rad^2
-        self.beam_area = (hdr['BMAJ']/2/180*pi)*(hdr['BMIN']/2/180*pi)*pi*2
+        self.beam_area = pi/(4*np.log(2)) * (hdr['BMAJ']/180*pi)*(hdr['BMIN']/180*pi)
         # beam width in au
         self.beam_maj_au = (hdr['BMAJ']/180*pi)*distance/au
         self.beam_min_au = (hdr['BMIN']/180*pi)*distance/au
@@ -939,8 +940,8 @@ class DiskImage:
         I = f_I(r)
         # rotate to align with beam
         I = ndimage.interpolation.rotate(I, -self.disk_pa+self.beam_pa,reshape=False) # ccw rotate
-        # blur
-        sigmas = [self.beam_maj_au/2/self.au_per_pix, self.beam_min_au/2/self.au_per_pix]
+        # blur: 2sqrt(2*log(2)) * sigma = FWHM
+        sigmas = np.array([self.beam_maj_au, self.beam_min_au])/self.au_per_pix/(2*np.sqrt(2*np.log(2)))
         I = ndimage.gaussian_filter(I, sigma=sigmas)
         # rotate to align with image
         I = ndimage.interpolation.rotate(I, -self.beam_pa,reshape=False)
@@ -960,7 +961,7 @@ class DiskImage:
 
         dlog_likelihood =  - chisq + 1/2 # normalization is unimportant here
 
-        beam_size_au_sq = self.beam_maj_au/2 * self.beam_min_au/2 * 2*pi
+        beam_size_au_sq = self.beam_maj_au * self.beam_min_au * pi/(4*np.log(2))
         pix_size_au_sq = self.au_per_pix**2
         beam_per_pix = pix_size_au_sq/beam_size_au_sq
         log_likelihood = np.sum(dlog_likelihood*beam_per_pix)
@@ -981,7 +982,7 @@ class DiskImage:
         is_disk = (img2>sigma)
         mean_chisq = np.sum(chisq*is_disk)/np.sum(is_disk)
 
-        beam_size_au_sq = self.beam_maj_au/2 * self.beam_min_au/2 * 2*pi
+        beam_size_au_sq = self.beam_maj_au * self.beam_min_au * pi/(4*np.log(2))
         pix_size_au_sq = self.au_per_pix**2
         beam_per_pix = pix_size_au_sq/beam_size_au_sq
         disk_area_in_beam = np.sum(is_disk)*beam_per_pix
@@ -1096,6 +1097,7 @@ class DiskFitting:
 
 import time
 import astropy.table
+import os
 
 def fit_vandam_image(
     source_name,
@@ -1156,8 +1158,13 @@ def fit_vandam_image(
         ra_deg_a = ra_deg_v
         dec_deg_a = dec_deg_v
 
+    f_alma = data_folder_path+'/observation/'+data[i]['FieldA']+'_cont_robust0.5.pbcor.fits'
+    if not os.path.exists(f_alma):
+        f_alma = data_folder_path+'/observation/'+data[i]['FieldA']+'_cont_robust2.pbcor.fits'
+    f_vla = data_folder_path+'/observation/'+data[i]['FieldV']+'.A.Ka.cont.0.5.robust.image.pbcor.fits'
+
     DI_alma = DiskImage(
-        fname = data_folder_path+'/observation/'+data[i]['FieldA']+'_cont_robust0.5.pbcor.fits',
+        fname = f_alma,
         ra_deg = ra_deg_a,
         dec_deg = dec_deg_a,
         distance_pc = data[i]['DistanceA'],
@@ -1167,7 +1174,7 @@ def fit_vandam_image(
     )
 
     DI_vla = DiskImage(
-        fname = data_folder_path+'/observation/'+data[i]['FieldV']+'.A.Ka.cont.0.5.robust.image.pbcor.fits',
+        fname = f_vla,
         ra_deg = ra_deg_v,
         dec_deg = dec_deg_v,
         distance_pc = data[i]['DistanceA'],
