@@ -1,6 +1,6 @@
-This repository contains scripts used for fitting a parametrized model of gravitationally self-regulated disks to multi-wavelength dust-continuum images. See descriptions of this model in Xu (2022, in prep).
+This repository contains scripts used for fitting a parametrized model of gravitationally self-regulated disks to multi-wavelength dust-continuum images. See descriptions of this model in Xu (2022).
 
-If you use scripts and data in this repository, please cite Xu (2022, in prep).
+If you use scripts and data in this repository, please cite Xu (2022, https://arxiv.org/abs/2203.00941).
 
 ## Example
 See example.ipynb.
