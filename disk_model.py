@@ -882,8 +882,14 @@ class DiskImage:
         fits_data = fits.open(fname)
         hdr = fits_data[0].header
         img = fits_data[0].data[0,0]
-        icx_float = (ra_deg-hdr['CRVAL1'])/hdr['CDELT1']+hdr['CRPIX1']-1
-        icy_float = (dec_deg-hdr['CRVAL2'])/hdr['CDELT2']+hdr['CRPIX2']-1
+        if ra_deg is None:
+            icx_float = img.shape[-1]/2
+        else:
+            icx_float = (ra_deg-hdr['CRVAL1'])/hdr['CDELT1']+hdr['CRPIX1']-1
+        if dec_deg is None:
+            icy_float = img.shape[-2]/2
+        else:
+            icy_float = (dec_deg-hdr['CRVAL2'])/hdr['CDELT2']+hdr['CRPIX2']-1
         icx = int(icx_float)
         icy = int(icy_float)
         signx = int(-np.sign(hdr['CDELT1'])) # x propto minus RA
